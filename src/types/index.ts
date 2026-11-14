@@ -1,0 +1,1 @@
+﻿export type CrateStatus='In transit'|'Delivered'|'Registered'|'Inactive';export interface Crate{id:string;batch:string;farm:string;destination:string;status:CrateStatus;nfc:string;temp:number;humidity:number;device:string;updated:string;vehicle:string;progress:number}
