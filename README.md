@@ -1,23 +1,23 @@
-﻿# SmartTrace — Poultry Traceability Demo
+﻿# SmartTrace — poultry supply chain traceability
 
-Responsive React + TypeScript frontend for poultry crate operations, shipment monitoring, and public traceability lookup. All readings, GPS locations, price details, and activity records are demonstration data; no hardware or backend is connected.
+A responsive React application for farmer and retailer workflows, crate level NFC identification, and public batch traceability.
 
 ## Run locally
 
-1. Install Node.js 20 or newer.
-2. Run `npm install`.
-3. Run `npm run dev` and open the local URL printed by Vite.
-4. Run `npm run build` for a production build.
+- Requires Node.js 20 or newer.
+- Run `npm install`, then `npm run dev`.
+- Run `npm run build` to compile the production frontend.
 
-## Demo flows
+## Available workflows
 
-- Admin overview and crate list: `/` and `/crates`; add crates from the register flow.
-- Monitoring and transport dashboards: `/monitoring` and `/transport`.
-- Simulated location map and supply chain timeline: `/tracking` and `/supply-chain`.
-- Public trace lookup: `/trace`; try `ST-2841` or `BAT-2025-087`.
-- The NFC page describes planned tag operations; browser writing to a physical tag is not simulated.
-- All data shown is labeled demo and does not constitute a food safety, freshness, or certification claim.
+- Sign-in screen separates Farmer and Retailer views. Demo sign-in accepts any non-empty ID and password; it does not authenticate accounts.
+- Farmers can register batches with farm, origin, quantity, weight, destination, purchase price and NFC UID, then dispatch registered batches.
+- Retailers can confirm incoming deliveries and update stock and selling prices. Price updates are timestamped in browser storage. Farmer and shipment details are read-only in retailer screens.
+- NFC registry maps tag UIDs to crates, batches and public `/trace/:tag` pages. The browser page does not write a physical tag.
+- Public trace pages show batch records, shipment events, sensor records and actual entered retailer prices. The app displays no price estimate when there is not enough historical data.
+- IoT monitoring displays only the sample readings attached to the included demo crates. No live device data is received.
+- Batch changes are saved in the current browser's local storage and are not shared with other users or devices.
 
-## Integration notes
+## Backend required for production
 
-`src/types` defines crate data, `src/data/mock.ts` keeps sample content separate, and `src/services/api.ts` provides a small async adapter that can be replaced with API calls. Authentication, permission enforcement, durable writes, alert delivery, reports, real maps/GPS, and sensor/device integrations require a backend and are not implemented in this frontend phase.
+This repository currently contains a frontend only. Real multi-user authentication, secure role enforcement, shared durable records, database migrations, audit log integrity, REST/MQTT sensor ingestion, live GPS maps, NFC hardware writes, and cross-retailer price comparisons require a backend and database. Do not use demo sign-in or local browser storage as production access control or verified supply chain data.
