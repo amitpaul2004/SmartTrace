@@ -10,7 +10,8 @@ async function request<T>(path:string, options:RequestInit={}):Promise<T>{
   const response=await fetch(`${base}${path}`,{...options,credentials:'include',headers:{'Content-Type':'application/json',...options.headers}});
   const body=await response.json().catch(()=>({}));
   if(!response.ok){
-    const error=new Error(body.error||`Request failed (${response.status})`) as ApiError;
+    const details=Array.isArray(body.details)?body.details.map((x:{field?:string;message?:string})=>`${x.field?`${x.field}: `:''}${x.message??''}`).filter(Boolean).join('; '):'';
+    const error=new Error([body.error,details].filter(Boolean).join(': ')||`Request failed (${response.status})`) as ApiError;
     error.status=response.status;
     throw error;
   }
@@ -31,6 +32,7 @@ export const api={
   me:async()=>{const result=await request<{user:ApiUser}>('/auth/me');setSessionToken('cookie');return result},
   logout:async()=>{try{await request('/auth/logout',{method:'POST'})}finally{setSessionToken(null)}},
   batches:()=>request<{data:DbBatch[]}>('/batches'),
+  retailers:()=>request<{data:{id:string;loginId:string;name:string;retailer?:{businessName:string;location:string}|null}[]}>('/retailers'),
   createBatch:(data:Record<string,unknown>)=>request<{data:DbBatch}>('/batches',{method:'POST',body:JSON.stringify(data)}),
   crates:()=>request<{data:DbCrate[]}>('/crates'),
   shipments:()=>request<{data:DbShipment[]}>('/shipments'),
@@ -48,6 +50,7 @@ export const api={
   latestReading:(crateId:string)=>request(`/crates/${crateId}/readings/latest`),
   location:(crateId:string)=>request(`/crates/${crateId}/location/latest`),
   adminUsers:()=>request<{data:{id:string;email:string;loginId:string;name:string;role:string;active:boolean;createdAt:string}[]}>('/admin/users'),
+  updateFarmerProfile:(data:{farmName:string;location:string})=>request<{data:{farmName:string;location:string}}>('/profile',{method:'PATCH',body:JSON.stringify(data)}),
 };
 
 export interface DbBatch { id:string;batchCode:string;farmerId:string;origin:string;quantity:number;totalWeightKg:number|string;status:string;createdAt:string;farmer?:{name:string;loginId:string;farmer?:{farmName:string;location:string}};crates:DbCrate[];prices?:{amount:number|string;createdAt:string;stage:string}[] }
@@ -56,10 +59,14 @@ export interface DbTag { id:string;uid:string;crateId:string|null;batchId:string
 export interface DbShipment { id:string;shipmentCode:string;batchId:string;crateId:string;farmerId:string;retailerId:string;destination:string;vehicle:string|null;status:string;dispatchedAt:string|null;receivedAt:string|null;batch?:DbBatch;crate?:DbCrate;farmer?:{name:string;loginId:string};retailer?:{name:string;loginId:string;retailer?:{businessName:string;location:string}} }
 
 export function toFrontendBatch(batch:DbBatch, crate:DbCrate) {
-  const shipment = crate.shipments?.[0] ?? batch.crates.flatMap(c=>c.shipments??[])[0];
+  const shipment = crate.shipments?.[0];
   const locations=[...(crate.locations??[])].reverse();
   const retailer = shipment?.retailer?.retailer?.businessName ?? shipment?.retailer?.name ?? shipment?.retailerId ?? 'Retailer pending';
-  const status = shipment?.status === 'DELIVERED' || batch.status === 'DELIVERED' ? 'Delivered' : shipment?.status === 'IN_TRANSIT' || batch.status === 'IN_TRANSIT' ? 'In transit' : 'Registered';
+  // A batch can contain several crates with separate shipments. Once a crate
+  // has a shipment, its state must come from that shipment rather than the
+  // aggregate batch status (which may reflect another crate).
+  const currentStatus = shipment?.status ?? batch.status;
+  const status = currentStatus === 'DELIVERED' ? 'Delivered' : currentStatus === 'IN_TRANSIT' ? 'In transit' : 'Registered';
   const priceRecords = (batch.prices??[]).filter(p=>p.stage==='CUSTOMER_SELLING').map(p=>({value:Number(p.amount),at:p.createdAt}));
   return {
     id:crate.crateCode,batch:batch.batchCode,farm:`${batch.farmer?.farmer?.farmName??batch.farmer?.name??'Farm'}, ${batch.farmer?.farmer?.location??''}`.replace(/,\s*$/,''),
