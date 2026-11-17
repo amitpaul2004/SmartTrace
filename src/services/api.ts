@@ -1,1 +1,1 @@
-﻿import{crates}from'../data/mock';import type{Crate}from'../types';export const api={async listCrates():Promise<Crate[]>{await new Promise(r=>setTimeout(r,250));return crates},async findCrate(id:string){await new Promise(r=>setTimeout(r,250));return crates.find(c=>c.id.toLowerCase()===id.toLowerCase()||c.batch.toLowerCase()===id.toLowerCase())}};
+export { api } from './client';

@@ -1,0 +1,214 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum UserRole {
+  FARMER
+  RETAILER
+  ADMIN
+}
+
+enum BatchStatus {
+  REGISTERED
+  IN_TRANSIT
+  DELIVERED
+  CANCELLED
+}
+
+enum ShipmentStatus {
+  READY
+  IN_TRANSIT
+  DELIVERED
+  CANCELLED
+}
+
+enum TagStatus {
+  REGISTERED
+  ASSIGNED
+  DEACTIVATED
+}
+
+enum PriceStage {
+  FARMER_PURCHASE
+  PROCESSING
+  TRANSPORT
+  RETAILER_PURCHASE
+  CUSTOMER_SELLING
+}
+
+model User {
+  id              String         @id @default(uuid()) @db.Uuid
+  email           String         @unique
+  loginId         String         @unique
+  passwordHash    String
+  name            String
+  phone           String?
+  role            UserRole
+  active          Boolean        @default(true)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  farmer          Farmer?
+  retailer        Retailer?
+  batches         ChickenBatch[] @relation("FarmerBatches")
+  shipments       Shipment[]     @relation("RetailerShipments")
+  farmerShipments Shipment[]     @relation("FarmerShipments")
+  prices          PriceHistory[]
+  stock           Stock[]
+}
+
+model Farmer {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @unique @db.Uuid
+  farmName  String
+  location  String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Retailer {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @unique @db.Uuid
+  businessName String
+  location     String
+  createdAt    DateTime @default(now())
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model ChickenBatch {
+  id            String         @id @default(uuid()) @db.Uuid
+  batchCode     String         @unique
+  farmerId      String         @db.Uuid
+  origin        String
+  quantity      Int
+  totalWeightKg Decimal        @db.Decimal(12, 3)
+  status        BatchStatus    @default(REGISTERED)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  farmer        User           @relation("FarmerBatches", fields: [farmerId], references: [id], onDelete: Restrict)
+  crates        Crate[]
+  shipments     Shipment[]
+  prices        PriceHistory[]
+  nfcTags       NFCTag[]
+}
+
+model Crate {
+  id        String          @id @default(uuid()) @db.Uuid
+  crateCode String          @unique
+  batchId   String          @db.Uuid
+  quantity  Int
+  weightKg  Decimal         @db.Decimal(12, 3)
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  batch     ChickenBatch    @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  nfcTag    NFCTag?
+  shipments Shipment[]
+  readings  SensorReading[]
+  locations GPSLocation[]
+  stocks    Stock[]
+  scans     ScanHistory[]
+}
+
+model NFCTag {
+  id            String        @id @default(uuid()) @db.Uuid
+  uid           String        @unique
+  crateId       String?       @unique @db.Uuid
+  batchId       String?       @db.Uuid
+  status        TagStatus     @default(REGISTERED)
+  registeredAt  DateTime      @default(now())
+  assignedAt    DateTime?
+  deactivatedAt DateTime?
+  crate         Crate?        @relation(fields: [crateId], references: [id], onDelete: Restrict)
+  batch         ChickenBatch? @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  scans         ScanHistory[]
+}
+
+model Shipment {
+  id           String         @id @default(uuid()) @db.Uuid
+  shipmentCode String         @unique
+  batchId      String         @db.Uuid
+  crateId      String         @db.Uuid
+  farmerId     String         @db.Uuid
+  retailerId   String         @db.Uuid
+  destination  String
+  vehicle      String?
+  status       ShipmentStatus @default(READY)
+  dispatchedAt DateTime?
+  receivedAt   DateTime?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  batch        ChickenBatch   @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  crate        Crate          @relation(fields: [crateId], references: [id], onDelete: Restrict)
+  farmer       User           @relation("FarmerShipments", fields: [farmerId], references: [id], onDelete: Restrict)
+  retailer     User           @relation("RetailerShipments", fields: [retailerId], references: [id], onDelete: Restrict)
+}
+
+model SensorReading {
+  id          String   @id @default(uuid()) @db.Uuid
+  deviceId    String
+  crateId     String   @db.Uuid
+  temperature Decimal? @db.Decimal(7, 3)
+  humidity    Decimal? @db.Decimal(7, 3)
+  recordedAt  DateTime
+  receivedAt  DateTime @default(now())
+  crate       Crate    @relation(fields: [crateId], references: [id], onDelete: Cascade)
+
+  @@index([crateId, recordedAt])
+  @@index([deviceId, recordedAt])
+}
+
+model GPSLocation {
+  id         String   @id @default(uuid()) @db.Uuid
+  deviceId   String
+  crateId    String   @db.Uuid
+  latitude   Decimal  @db.Decimal(10, 7)
+  longitude  Decimal  @db.Decimal(10, 7)
+  recordedAt DateTime
+  receivedAt DateTime @default(now())
+  crate      Crate    @relation(fields: [crateId], references: [id], onDelete: Cascade)
+
+  @@index([crateId, recordedAt])
+}
+
+model PriceHistory {
+  id        String       @id @default(uuid()) @db.Uuid
+  batchId   String       @db.Uuid
+  actorId   String       @db.Uuid
+  stage     PriceStage
+  amount    Decimal      @db.Decimal(12, 2)
+  currency  String       @default("INR") @db.Char(3)
+  createdAt DateTime     @default(now())
+  batch     ChickenBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  actor     User         @relation(fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([batchId, stage, createdAt])
+}
+
+model Stock {
+  id         String   @id @default(uuid()) @db.Uuid
+  retailerId String   @db.Uuid
+  crateId    String   @db.Uuid
+  quantity   Int
+  updatedAt  DateTime @updatedAt
+  retailer   User     @relation(fields: [retailerId], references: [id], onDelete: Cascade)
+  crate      Crate    @relation(fields: [crateId], references: [id], onDelete: Restrict)
+
+  @@unique([retailerId, crateId])
+}
+
+model ScanHistory {
+  id        String   @id @default(uuid()) @db.Uuid
+  tagId     String   @db.Uuid
+  crateId   String?  @db.Uuid
+  scannedAt DateTime @default(now())
+  source    String   @default("PUBLIC_PORTAL")
+  tag       NFCTag   @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  crate     Crate?   @relation(fields: [crateId], references: [id], onDelete: SetNull)
+
+  @@index([tagId, scannedAt])
+}
